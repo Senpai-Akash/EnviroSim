@@ -34,6 +34,26 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.get("/warmup", async (req, res) => {
+  const warmupResult = await warmMlServiceIfNeeded();
+
+  if (warmupResult.ok) {
+    return res.json({
+      status: "Backend + ML warmed",
+      service: "backend",
+      mlService: getMlEndpoints().baseUrl,
+      warmup: warmupResult,
+    });
+  }
+
+  return res.json({
+    status: "Backend awake, ML warming",
+    service: "backend",
+    mlService: getMlEndpoints().baseUrl,
+    warmup: warmupResult,
+  });
+});
+
 app.post("/simulate", simulateController);
 
 const PORT = process.env.PORT || 6969;

@@ -79,3 +79,19 @@ export async function simulate(data = {}) {
     throw err;
   }
 }
+
+export async function warmup() {
+  if (!BACKEND_URL) {
+    throw new Error("NEXT_PUBLIC_BACKEND_URL is not configured");
+  }
+
+  const res = await fetch(`${BACKEND_URL}/warmup`, {
+    method: "GET",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Warmup request failed (${res.status})`);
+  }
+
+  return await res.json();
+}

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import WarmupOnLoad from "./components/WarmupOnLoad";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 
@@ -29,7 +30,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-white dark:bg-slate-950 text-black dark:text-white transition-colors duration-300">{children}</body>
+      <body className="min-h-full flex flex-col bg-white dark:bg-slate-950 text-black dark:text-white transition-colors duration-300">
+        <WarmupOnLoad />
+        {children}
+      </body>
     </html>
   );
 }

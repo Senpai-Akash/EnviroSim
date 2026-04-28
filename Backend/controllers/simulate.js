@@ -163,7 +163,11 @@ function isTimeoutLikeError(err) {
 async function warmMlServiceIfNeeded() {
   const now = Date.now();
   if (now - lastWarmSuccessAt < ML_WARM_CACHE_MS) {
-    return;
+    return {
+      ok: true,
+      cached: true,
+      status: "warm",
+    };
   }
 
   const { rootUrl, healthUrl } = getMlEndpoints();
@@ -183,11 +187,24 @@ async function warmMlServiceIfNeeded() {
       status: response.status,
       data: response.data,
     });
+    return {
+      ok: response.status >= 200 && response.status < 500,
+      cached: false,
+      status: "warm",
+      upstreamStatus: response.status,
+      data: response.data,
+    };
   } catch (err) {
     console.warn("[simulate] ML warm-up failed", {
       url: warmTarget,
       ...sanitizeAxiosError(err),
     });
+    return {
+      ok: false,
+      cached: false,
+      status: "warming",
+      error: sanitizeAxiosError(err),
+    };
   } finally {
     cleanup();
   }
