@@ -102,7 +102,7 @@ The repository currently contains Python model files inside `Data/Models`, but i
 If you add an ML service later, you can document it here in this format:
 
 ```bash
-cd Ml
+cd InferenceService
 pip install -r requirements.txt
 python app.py
 ```
