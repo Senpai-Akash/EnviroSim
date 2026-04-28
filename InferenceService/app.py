@@ -8,6 +8,8 @@ injected at lag-1 position for interactive what-if scenarios.
 from __future__ import annotations
 
 import sys
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # Add project root to Python path for Render deployment
@@ -20,7 +22,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, root_validator
 
 from Data.Models.flood_model import load_model_bundle as load_flood_bundle
 from Data.Models.flood_model import predict_risk_frame
@@ -31,8 +33,6 @@ from Data.Models.temperature_model import predict_max_temp_frame
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("inference")
-
-import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -70,11 +70,39 @@ CSV_COL_MAP = {
 # ---------------------------------------------------------------------------
 
 class PredictRequest(BaseModel):
+    features: list[float] | None = None
     temperature: float = Field(default=25.0, ge=-10, le=65)
     pollution: float = Field(default=30.0, ge=0, le=600)
     rainfall: float = Field(default=45.0, ge=0, le=1000)
     vegetation: float = Field(default=60.0, ge=0, le=100)
     month: int = Field(default=1, ge=1, le=12)
+
+    @root_validator(pre=True)
+    def map_features_payload(cls, values: dict[str, Any]) -> dict[str, Any]:
+        features = values.get("features")
+        if not isinstance(features, list):
+            return values
+
+        if len(features) == 5:
+            rainfall, temperature, pollution, vegetation, month = features
+            values.setdefault("rainfall", rainfall)
+            values.setdefault("temperature", temperature)
+            values.setdefault("pollution", pollution)
+            values.setdefault("vegetation", vegetation)
+            values.setdefault("month", month)
+            return values
+
+        if len(features) == 3:
+            rainfall, temperature, humidity = features
+            values.setdefault("rainfall", rainfall)
+            values.setdefault("temperature", temperature)
+            values.setdefault("pollution", humidity)
+            return values
+
+        raise ValueError("features must contain either 3 or 5 numeric values")
+
+    class Config:
+        extra = "forbid"
 
 
 class RiskBreakdown(BaseModel):
@@ -221,29 +249,53 @@ def build_feature_row(
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="EnviroSim Inference Service", version="1.0.0")
 
-# Load at startup
-try:
-    FLOOD_BUNDLE = load_flood_bundle(MODELS_DIR / "flood_model.joblib")
-    POLLUTION_BUNDLE = load_pollution_bundle(MODELS_DIR / "pollution_model.joblib")
-    TEMP_BUNDLE = load_temp_bundle(MODELS_DIR / "temperature_model.joblib")
-    print("✅ Models loaded")
-except Exception as e:
-    print("❌ MODEL LOAD ERROR:", e)
-    raise e
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start = time.perf_counter()
+    logger.info("Starting inference service bootstrap")
 
-HISTORICAL_TAIL, DERIVED_RATIOS = load_historical_context(MERGED_CSV)
+    try:
+        app.state.flood_bundle = load_flood_bundle(MODELS_DIR / "flood_model.joblib")
+        app.state.pollution_bundle = load_pollution_bundle(MODELS_DIR / "pollution_model.joblib")
+        app.state.temp_bundle = load_temp_bundle(MODELS_DIR / "temperature_model.joblib")
+        app.state.historical_tail, app.state.derived_ratios = load_historical_context(MERGED_CSV)
+        app.state.started_at = time.time()
+        logger.info(
+            "Inference bootstrap complete in %.2fs",
+            time.perf_counter() - start,
+        )
+    except Exception:
+        logger.exception("Inference service failed to load startup assets")
+        raise
 
-logger.info("All models and historical data loaded.")
+    yield
+
+
+app = FastAPI(
+    title="EnviroSim Inference Service",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+
+@app.get("/")
+def root() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "service": "inference",
+        "message": "Inference service is awake",
+    }
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    historical_tail = getattr(app.state, "historical_tail", [])
     return {
         "status": "ok",
+        "service": "inference",
         "models_loaded": ["flood", "pollution", "temperature"],
-        "historical_rows": len(HISTORICAL_TAIL),
+        "historical_rows": len(historical_tail),
     }
 
 
@@ -278,6 +330,35 @@ def _pm25_to_risk(pm25: float) -> float:
         lo = hi_pm
     # Above 250
     return min(85 + (pm25 - 250) / 250 * 15, 100)
+
+
+def _rainfall_input_to_risk(rainfall_input: float) -> float:
+    """
+    Convert rainfall slider input (mm) into a monotonic 0..100 flood-pressure term.
+
+    This supplements the flood classifier so one scenario override is still visibly
+    reflected in the UI even when the underlying lagged model output moves only a
+    little.
+    """
+    if rainfall_input <= 20:
+        return 0.0
+    if rainfall_input <= 80:
+        return float(((rainfall_input - 20) / 60) * 20)
+    if rainfall_input <= 180:
+        return float(20 + ((rainfall_input - 80) / 100) * 35)
+    if rainfall_input <= 300:
+        return float(55 + ((rainfall_input - 180) / 120) * 25)
+    return float(min(80 + ((rainfall_input - 300) / 200) * 20, 100))
+
+
+def adjust_flood_probability(flood_prob: float, rainfall_input: float) -> float:
+    """
+    Blend model probability with a bounded rainfall scenario term so rainfall
+    changes are visible without overwhelming the trained model signal.
+    """
+    rainfall_term = _rainfall_input_to_risk(rainfall_input) / 100.0
+    adjusted = (0.65 * flood_prob) + (0.35 * rainfall_term)
+    return float(np.clip(adjusted, 0.0, 1.0))
 
 
 def _temp_to_risk_bangalore(temp_c: float) -> float:
@@ -333,13 +414,14 @@ def _pollution_input_to_risk(pollution_input: float) -> float:
 
 def compute_environmental_risk(
     flood_prob: float,
+    rainfall_input: float,
     pm25: float,
     temp_c: float,
     pollution_input: float,
     vegetation_input: float,
 ) -> RiskBreakdown:
     """Compute combined environmental risk from the 3 ML model outputs."""
-    flood_score = round(flood_prob * 100, 1)        # already 0-1 probability
+    flood_score = round(flood_prob * 100, 1)
     aq_base = _pm25_to_risk(max(pm25, 0))
     aq_slider = _pollution_input_to_risk(pollution_input)
     aq_adjust = _pollution_slider_adjustment(pollution_input)
@@ -378,7 +460,7 @@ def compute_environmental_risk(
         combined_risk_label=label,
         methodology=(
             "Combined risk derived from ML model outputs. "
-            "Flood: model probability × 100 (weight 30%). "
+            "Flood: model probability blended with bounded rainfall scenario responsiveness (weight 30%). "
             "Air quality: predicted PM2.5 mapped to EPA AQI breakpoints with bounded "
             "scenario responsiveness from pollution slider (weight 30%). "
             "Heat stress: predicted temp mapped to IMD Bangalore thresholds (weight 25%). "
@@ -389,23 +471,41 @@ def compute_environmental_risk(
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(payload: PredictRequest) -> PredictionResponse:
+    started_at = time.perf_counter()
+    logger.info(
+        "Predict request received temp=%s pollution=%s rainfall=%s vegetation=%s month=%s",
+        payload.temperature,
+        payload.pollution,
+        payload.rainfall,
+        payload.vegetation,
+        payload.month,
+    )
+
     try:
-        user = map_user_to_series(payload, DERIVED_RATIOS)
+        flood_bundle = app.state.flood_bundle
+        pollution_bundle = app.state.pollution_bundle
+        temp_bundle = app.state.temp_bundle
+        historical_tail = app.state.historical_tail
+        derived_ratios = app.state.derived_ratios
 
-        flood_row = build_feature_row(FLOOD_BUNDLE["feature_cols"], HISTORICAL_TAIL, user, payload.month)
-        poll_row = build_feature_row(POLLUTION_BUNDLE["feature_cols"], HISTORICAL_TAIL, user, payload.month)
-        temp_row = build_feature_row(TEMP_BUNDLE["feature_cols"], HISTORICAL_TAIL, user, payload.month)
-        
-        print(f"✅ Feature rows built for temp={payload.temperature}, pollution={payload.pollution}")
+        user = map_user_to_series(payload, derived_ratios)
 
-        print(f"⏳ Running predictions...")
-        flood_prob = float(predict_risk_frame(flood_row, FLOOD_BUNDLE)[0])
-        next_pm25 = float(predict_pm25_frame(poll_row, POLLUTION_BUNDLE)[0])
-        next_temp = float(predict_max_temp_frame(temp_row, TEMP_BUNDLE)[0])
-        print(f"✅ Predictions: flood={flood_prob:.3f}, pm25={next_pm25:.2f}, temp={next_temp:.2f}")
+        flood_row = build_feature_row(flood_bundle["feature_cols"], historical_tail, user, payload.month)
+        poll_row = build_feature_row(pollution_bundle["feature_cols"], historical_tail, user, payload.month)
+        temp_row = build_feature_row(temp_bundle["feature_cols"], historical_tail, user, payload.month)
+
+        flood_prob = float(predict_risk_frame(flood_row, flood_bundle)[0])
+        next_pm25 = float(predict_pm25_frame(poll_row, pollution_bundle)[0])
+        next_temp = float(predict_max_temp_frame(temp_row, temp_bundle)[0])
+
+        adjusted_flood_prob = adjust_flood_probability(
+            flood_prob,
+            payload.rainfall,
+        )
 
         risk = compute_environmental_risk(
-            flood_prob,
+            adjusted_flood_prob,
+            payload.rainfall,
             next_pm25,
             next_temp,
             payload.pollution,
@@ -413,7 +513,7 @@ def predict(payload: PredictRequest) -> PredictionResponse:
         )
 
         return PredictionResponse(
-            flood_risk_probability=round(flood_prob, 4),
+            flood_risk_probability=round(adjusted_flood_prob, 4),
             predicted_pm25_next_day=round(max(next_pm25, 0), 2),
             predicted_temp_max_next_day=round(next_temp, 2),
             environmental_risk=risk,
@@ -426,12 +526,18 @@ def predict(payload: PredictRequest) -> PredictionResponse:
             },
             metadata={
                 "mode": "historical-lag-with-scenario-override",
-                "historical_rows_used": len(HISTORICAL_TAIL),
+                "historical_rows_used": len(historical_tail),
                 "lag_construction": "lag1=user_slider, lag2..14=real_dataset_tail",
                 "vegetation_source": str(VEGETATION_CSV.relative_to(BASE_DIR)),
+                "inference_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                "raw_flood_model_probability": round(flood_prob, 4),
             },
         )
     except Exception as exc:
-        print(f"❌ INFERENCE ERROR: {exc}")
         logger.exception("Inference failure")
         raise HTTPException(status_code=500, detail=f"Inference failure: {exc}") from exc
+    finally:
+        logger.info(
+            "Predict request finished in %.2fms",
+            (time.perf_counter() - started_at) * 1000,
+        )

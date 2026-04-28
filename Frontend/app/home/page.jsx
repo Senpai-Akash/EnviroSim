@@ -4,13 +4,11 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, MapPin, Cloud, Droplets, Thermometer, TrendingUp, Zap } from "lucide-react";
 import Map from "@/app/components/Map";
-
-// changed the url
-const BACKEND_URL = "https://envirosim-1.onrender.com";
+import { simulate } from "@/app/utils/api";
 
 const Home = () => {
   const [predictionData, setPredictionData] = useState(null);
-  const [sliderValues, setSliderValues] = useState({
+  const [sliderValues] = useState({
     pollution: 45,
     flood: 30,
     temperature: 60,
@@ -21,21 +19,13 @@ const Home = () => {
     const fetchPrediction = async () => {
       setPredictionLoading(true);
       try {
-        const response = await fetch(`${BACKEND_URL}/simulate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            temperature: 28,
-            pollution: 50,
-            rainfall: 45,
-            vegetation: 60,
-            month: new Date().getMonth() + 1,
-          }),
+        const data = await simulate({
+          temperature: 28,
+          pollution: 50,
+          rainfall: 45,
+          vegetation: 60,
+          month: new Date().getMonth() + 1,
         });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
         setPredictionData(data);
       } catch (error) {
         console.error('Error fetching prediction:', error);
@@ -46,13 +36,6 @@ const Home = () => {
 
     fetchPrediction();
   }, []);
-
-  const handleSliderChange = (type, value) => {
-    setSliderValues(prev => ({
-      ...prev,
-      [type]: value,
-    }));
-  };
 
   return (
     <main className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -65,7 +48,7 @@ const Home = () => {
               <div className="space-y-3">
                 <p className="text-sm uppercase tracking-[0.28em] text-blue-600 dark:text-blue-400 font-semibold">Real-Time Environmental Intelligence</p>
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
-                  Monitor Bangalore's
+                  Monitor Bangalore&apos;s
                   <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">Environmental Risk</span>
                 </h1>
               </div>

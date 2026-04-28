@@ -2,6 +2,7 @@
 import { AngleSlider } from "@ark-ui/react/angle-slider";
 import { useStore } from "../store/useStore";
 import { useEffect, useRef } from "react";
+import { simulate } from "@/app/utils/api";
 
 const width = 200;
 const thickness = 20;
@@ -18,29 +19,18 @@ export default function WithKnobAngleSlider() {
       return;
     }
 
-    const controller = new AbortController();
     const timeout = setTimeout(() => {
-      // changed the url
-      fetch("https://envirosim-1.onrender.com/simulate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rainfall: rainPercent }),
-        signal: controller.signal,
-      })
-        .then((res) => res.json())
+      simulate({ rainfall: rainPercent })
         .then((data) => {
           console.log("Backend response:", data);
         })
         .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error(err);
-          }
+          console.error(err);
         });
     }, 1000);
 
     return () => {
       clearTimeout(timeout);
-      controller.abort();
     };
   }, [rainPercent]);
 

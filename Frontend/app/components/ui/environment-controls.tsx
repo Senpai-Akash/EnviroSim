@@ -21,7 +21,7 @@ interface EnvironmentControlsProps {
   onPredictionChange?: (payload: {
     loading: boolean;
     error?: string;
-    data?: any;
+    data?: unknown;
   }) => void;
   className?: string;
   layout?: 'vertical' | 'horizontal';
@@ -42,10 +42,15 @@ export default function EnvironmentControls({
 
   // Refs to avoid stale closures and infinite-loop from callback identity changes
   const predictionCbRef = useRef(onPredictionChange);
-  predictionCbRef.current = onPredictionChange;
-
   const onValuesChangeRef = useRef(onValuesChange);
-  onValuesChangeRef.current = onValuesChange;
+
+  useEffect(() => {
+    predictionCbRef.current = onPredictionChange;
+  }, [onPredictionChange]);
+
+  useEffect(() => {
+    onValuesChangeRef.current = onValuesChange;
+  }, [onValuesChange]);
 
   const handleValueChange = (key: keyof EnvironmentValue, value: number) => {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -89,7 +94,6 @@ export default function EnvironmentControls({
     return () => {
       clearTimeout(timeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values]);
 
   const environmentParams = [

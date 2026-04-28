@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EnvirSim - Simulate today, Protect Tomorrow",
+  title: "EnviroSim - Simulate today, Protect Tomorrow",
   description: "Predictive environmental analytics platform for Bangalore",
 };
 

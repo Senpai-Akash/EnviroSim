@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, Layers, MapPin, Activity } from "lucide-react";
+import { simulate } from "@/app/utils/api";
 
 const INITIAL_CENTER = [12.9716, 77.5946];
-// changed the url
-const BACKEND_URL = "https://envirosim-1.onrender.com";
 const INITIAL_ZOOM = 12;
 const BANGALORE_BOUNDS = [
   [12.82, 77.43],
@@ -130,23 +129,13 @@ export default function Map({ predictionData, predictionLoading = false, sliderV
         
         for (const area of BANGALORE_AREAS) {
           try {
-            const response = await fetch(`${BACKEND_URL}/simulate`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                temperature: 28,
-                pollution: 50,
-                rainfall: 45,
-                vegetation: 60,
-                month: new Date().getMonth() + 1,
-              }),
+            const data = await simulate({
+              temperature: 28,
+              pollution: 50,
+              rainfall: 45,
+              vegetation: 60,
+              month: new Date().getMonth() + 1,
             });
-            
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
             predictions[area.area] = data;
           } catch (error) {
             console.error(`Error fetching prediction for ${area.area}:`, error);
