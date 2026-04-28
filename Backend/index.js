@@ -35,7 +35,7 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/warmup", async (req, res) => {
-  const warmupResult = await warmMlServiceIfNeeded();
+  const warmupResult = await warmMlServiceIfNeeded({ force: true });
 
   if (warmupResult.ok) {
     return res.json({
@@ -60,7 +60,7 @@ const PORT = process.env.PORT || 6969;
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`);
-  warmMlServiceIfNeeded().catch((err) => {
+  warmMlServiceIfNeeded({ force: true }).catch((err) => {
     console.warn("Initial ML warm-up failed", err.message);
   });
 });

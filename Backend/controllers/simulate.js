@@ -160,13 +160,15 @@ function isTimeoutLikeError(err) {
   );
 }
 
-async function warmMlServiceIfNeeded() {
+async function warmMlServiceIfNeeded(options = {}) {
+  const { force = false } = options;
   const now = Date.now();
-  if (now - lastWarmSuccessAt < ML_WARM_CACHE_MS) {
+  if (!force && now - lastWarmSuccessAt < ML_WARM_CACHE_MS) {
     return {
       ok: true,
       cached: true,
       status: "warm",
+      targetUrl: getMlEndpoints().rootUrl,
     };
   }
 
@@ -191,6 +193,7 @@ async function warmMlServiceIfNeeded() {
       ok: response.status >= 200 && response.status < 500,
       cached: false,
       status: "warm",
+      targetUrl: warmTarget,
       upstreamStatus: response.status,
       data: response.data,
     };
@@ -203,6 +206,7 @@ async function warmMlServiceIfNeeded() {
       ok: false,
       cached: false,
       status: "warming",
+      targetUrl: warmTarget,
       error: sanitizeAxiosError(err),
     };
   } finally {

@@ -126,25 +126,28 @@ export default function Map({ predictionData, predictionLoading = false, sliderV
     const fetchAreaPredictions = async () => {
       try {
         const predictions = {};
-        
+        const requestPayload = {
+          temperature: 28,
+          pollution: 50,
+          rainfall: 45,
+          vegetation: 60,
+          month: new Date().getMonth() + 1,
+        };
+
+        // Keep these requests strictly sequential so we do not fan out all
+        // area simulations at once.
         for (const area of BANGALORE_AREAS) {
           try {
-            const data = await simulate({
-              temperature: 28,
-              pollution: 50,
-              rainfall: 45,
-              vegetation: 60,
-              month: new Date().getMonth() + 1,
-            });
+            const data = await simulate(requestPayload);
             predictions[area.area] = data;
           } catch (error) {
             console.error(`Error fetching prediction for ${area.area}:`, error);
           }
         }
-        
+
         setAreaPredictions(predictions);
       } catch (error) {
-        console.error('Error fetching area predictions:', error);
+        console.error("Error fetching area predictions:", error);
       }
     };
 
