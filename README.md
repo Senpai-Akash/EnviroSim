@@ -1,5 +1,9 @@
 # EnviroSim
 
+> Live Demo: **[enviro-sim.vercel.app](https://enviro-sim.vercel.app)**
+
+[![Live on Vercel](https://img.shields.io/badge/Live%20Demo-Visit%20EnviroSim-0f172a?style=for-the-badge&logo=vercel&logoColor=white)](https://enviro-sim.vercel.app)
+
 EnviroSim is an environmental simulation project that helps visualize how changing environmental conditions can affect local infrastructure. The repository currently includes a `Next.js` frontend, an `Express` backend, and a `Data` workspace for datasets, processed outputs, and future ML model work.
 
 ## Overview
@@ -136,7 +140,9 @@ Make sure the backend is running before using simulation features in the fronten
 
 ### Simulation Dashboard
 
-![Simulation Dashboard](./screenshots/simulation_page.png)
+![Simulation Dashboard 1](./screenshots/Simulation1.jpeg)
+
+![Simulation Dashboard 2](./screenshots/simulation2.jpeg)
 
 ### Documentation Page
 
@@ -149,16 +155,13 @@ Make sure the backend is running before using simulation features in the fronten
 - `Data/outputs` stores generated result files.
 - `Data/Models` is available for future Python model development.
 
-At the moment, the ML side looks like a workspace-in-progress rather than a runnable standalone service.
+## Contributors
 
-## Contributing
+- [Aayush Singh](https://github.com/Aayush4518)
+- [Akash Anderson](https://github.com/Senpai-Akash)
+- [Aryan Kumar](https://github.com/Aryan10N)
+- [Nelisa](https://github.com/nelisa18-06)
 
-If you are working with teammates:
-
-1. Pull the latest changes.
-2. Install dependencies inside the relevant folder.
-3. Run the frontend and backend locally.
-4. Keep README instructions updated whenever setup steps change.
 
 ## License
 
