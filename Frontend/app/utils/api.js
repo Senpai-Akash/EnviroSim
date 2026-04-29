@@ -40,13 +40,13 @@ export function buildSimulationPayload(data = {}) {
   };
 }
 
-export async function simulate(data = {}) {
+export async function simulate(data = {}, isRetry = false) {
   if (!BACKEND_URL) {
     throw new Error("NEXT_PUBLIC_BACKEND_URL is not configured");
   }
 
   const payload = buildSimulationPayload(data);
-  console.log("Simulate payload:", payload);
+  console.log("[Simulate] Request payload:", payload);
 
   try {
     const res = await fetch(`${BACKEND_URL}/simulate`, {
@@ -75,13 +75,24 @@ export async function simulate(data = {}) {
 
     return await res.json();
   } catch (err) {
-    console.error("Error in API call:", err);
+    console.error("[Simulate] Error in API call:", err.message);
+    
+    // If first attempt and ML might still be warming up, wait and retry
+    if (!isRetry && err.message.includes("ML")) {
+      console.log("[Simulate] ML service might still be warming up. Waiting 5 seconds before retry...");
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return simulate(data, true); // Retry once
+    }
+    
     throw err;
   }
 }
 
-const MAX_WARMUP_RETRIES = 3;
-const WARMUP_RETRY_DELAY_MS = 1000;
+const MAX_WARMUP_RETRIES = 5;
+const WARMUP_RETRY_DELAY_MS = 2000; // 2 seconds between retries
+const ML_WARMUP_TIMEOUT_MS = 50000; // 50 seconds for ML service (cold start takes 30-40s)
+const ML_MAX_RETRIES = 6; // More retries for ML since it takes longer
+const ML_RETRY_DELAY_MS = 3000; // 3 seconds between ML retries
 
 export async function warmup(retryCount = 0) {
   if (!BACKEND_URL) {
@@ -89,7 +100,7 @@ export async function warmup(retryCount = 0) {
   }
 
   try {
-    console.log(`[API Warmup] Attempt ${retryCount + 1}/${MAX_WARMUP_RETRIES + 1} to ${BACKEND_URL}/warmup`);
+    console.log(`[API Warmup - Backend] Attempt ${retryCount + 1}/${MAX_WARMUP_RETRIES + 1} to ${BACKEND_URL}/warmup`);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
@@ -110,16 +121,78 @@ export async function warmup(retryCount = 0) {
     }
 
     const data = await res.json();
-    console.log("[API Warmup] Success", data);
+    console.log("[API Warmup - Backend] Success", data);
     return data;
   } catch (err) {
-    console.error(`[API Warmup] Attempt ${retryCount + 1} failed:`, err.message);
+    console.error(`[API Warmup - Backend] Attempt ${retryCount + 1} failed:`, err.message);
 
     // Retry if we haven't exceeded max retries
     if (retryCount < MAX_WARMUP_RETRIES) {
-      console.log(`[API Warmup] Retrying in ${WARMUP_RETRY_DELAY_MS}ms...`);
+      console.log(`[API Warmup - Backend] Retrying in ${WARMUP_RETRY_DELAY_MS}ms...`);
       await new Promise((resolve) => setTimeout(resolve, WARMUP_RETRY_DELAY_MS));
       return warmup(retryCount + 1);
+    }
+
+    throw err;
+  }
+}
+
+export async function warmupMlService(mlUrl, retryCount = 0) {
+  if (!mlUrl) {
+    throw new Error("ML service URL is not available");
+  }
+
+  // Normalize URL - remove trailing slashes and /docs, /openapi.json
+  const normalizedUrl = mlUrl
+    .replace(/\/+$/, "")
+    .replace(/\/docs$/, "")
+    .replace(/\/openapi\.json$/, "");
+
+  const warmupTargets = [
+    `${normalizedUrl}/`,
+    `${normalizedUrl}/health`,
+  ];
+
+  try {
+    console.log(`[API Warmup - ML] Attempt ${retryCount + 1}/${ML_MAX_RETRIES + 1} to ${normalizedUrl}`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ML_WARMUP_TIMEOUT_MS);
+
+    // Try the root endpoint first, fallback to health endpoint
+    let lastError;
+    for (const target of warmupTargets) {
+      try {
+        const res = await fetch(target, {
+          method: "GET",
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (res.ok || res.status < 500) {
+          // Success or at least server is responding
+          clearTimeout(timeoutId);
+          const text = await res.text();
+          console.log(`[API Warmup - ML] Success (${res.status}) from ${target}`);
+          return { status: res.status, url: target };
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    clearTimeout(timeoutId);
+    throw lastError || new Error("ML service did not respond");
+  } catch (err) {
+    console.error(`[API Warmup - ML] Attempt ${retryCount + 1} failed:`, err.message);
+
+    // Retry if we haven't exceeded max retries
+    if (retryCount < ML_MAX_RETRIES) {
+      console.log(`[API Warmup - ML] Retrying in ${ML_RETRY_DELAY_MS}ms (${retryCount + 1}/${ML_MAX_RETRIES})...`);
+      await new Promise((resolve) => setTimeout(resolve, ML_RETRY_DELAY_MS));
+      return warmupMlService(mlUrl, retryCount + 1);
     }
 
     throw err;
