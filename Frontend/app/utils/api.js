@@ -80,18 +80,48 @@ export async function simulate(data = {}) {
   }
 }
 
-export async function warmup() {
+const MAX_WARMUP_RETRIES = 3;
+const WARMUP_RETRY_DELAY_MS = 1000;
+
+export async function warmup(retryCount = 0) {
   if (!BACKEND_URL) {
     throw new Error("NEXT_PUBLIC_BACKEND_URL is not configured");
   }
 
-  const res = await fetch(`${BACKEND_URL}/warmup`, {
-    method: "GET",
-  });
+  try {
+    console.log(`[API Warmup] Attempt ${retryCount + 1}/${MAX_WARMUP_RETRIES + 1} to ${BACKEND_URL}/warmup`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
-  if (!res.ok) {
-    throw new Error(`Warmup request failed (${res.status})`);
+    const res = await fetch(`${BACKEND_URL}/warmup`, {
+      method: "GET",
+      credentials: "include",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      throw new Error(`Warmup request failed with status ${res.status}`);
+    }
+
+    const data = await res.json();
+    console.log("[API Warmup] Success", data);
+    return data;
+  } catch (err) {
+    console.error(`[API Warmup] Attempt ${retryCount + 1} failed:`, err.message);
+
+    // Retry if we haven't exceeded max retries
+    if (retryCount < MAX_WARMUP_RETRIES) {
+      console.log(`[API Warmup] Retrying in ${WARMUP_RETRY_DELAY_MS}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, WARMUP_RETRY_DELAY_MS));
+      return warmup(retryCount + 1);
+    }
+
+    throw err;
   }
-
-  return await res.json();
 }

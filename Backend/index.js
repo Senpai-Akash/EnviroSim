@@ -8,11 +8,29 @@ const {
 
 const app = express();
 
-app.use(cors({
-  origin: "https://enviro-sim.vercel.app",
+// CORS configuration that allows both production and local development
+const corsOptions = {
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      "https://enviro-sim.vercel.app",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3001",
+    ];
+    
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"]
-}));
+  allowedHeaders: ["Content-Type"],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
@@ -35,9 +53,11 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/warmup", async (req, res) => {
+  console.log("[Backend] Warmup request received from:", req.get("origin"));
   const warmupResult = await warmMlServiceIfNeeded({ force: true });
 
   if (warmupResult.ok) {
+    console.log("[Backend] Warmup successful");
     return res.json({
       status: "Backend + ML warmed",
       service: "backend",
@@ -46,6 +66,7 @@ app.get("/warmup", async (req, res) => {
     });
   }
 
+  console.log("[Backend] Warmup in progress");
   return res.json({
     status: "Backend awake, ML warming",
     service: "backend",
