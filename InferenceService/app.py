@@ -279,7 +279,7 @@ app = FastAPI(
 )
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root() -> dict[str, Any]:
     return {
         "status": "ok",
@@ -288,7 +288,7 @@ def root() -> dict[str, Any]:
     }
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health() -> dict[str, Any]:
     historical_tail = getattr(app.state, "historical_tail", [])
     return {

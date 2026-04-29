@@ -25,7 +25,7 @@ const corsOptions = {
       callback(new Error("Not allowed by CORS"));
     }
   },
-  methods: ["GET", "POST"],
+  methods: ["GET", "HEAD", "POST"],
   allowedHeaders: ["Content-Type"],
   credentials: true
 };
@@ -42,6 +42,11 @@ app.get("/", (req, res) => {
   });
 });
 
+// HEAD endpoint for UptimeRobot (returns same headers as GET, no body)
+app.head("/", (req, res) => {
+  res.sendStatus(200);
+});
+
 // Health check
 app.get("/health", (req, res) => {
   res.json({
@@ -50,6 +55,11 @@ app.get("/health", (req, res) => {
     message: "Backend is running",
     mlService: getMlEndpoints().baseUrl,
   });
+});
+
+// HEAD endpoint for health (UptimeRobot)
+app.head("/health", (req, res) => {
+  res.sendStatus(200);
 });
 
 app.get("/warmup", async (req, res) => {
@@ -73,6 +83,11 @@ app.get("/warmup", async (req, res) => {
     mlService: getMlEndpoints().baseUrl,
     warmup: warmupResult,
   });
+});
+
+// HEAD endpoint for warmup (UptimeRobot)
+app.head("/warmup", (req, res) => {
+  res.sendStatus(200);
 });
 
 app.post("/simulate", simulateController);
