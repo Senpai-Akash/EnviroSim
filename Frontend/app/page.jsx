@@ -1,6 +1,6 @@
 // import Map from "./components/Map";
 import Component from "./components/ui/landing-page"; // Import the landing page component
-import { metadata } from "next";
+// import { metadata } from "next";
 
 export const metadata = {
   title: "EnviroSim - Predictive Environmental Analytics for Bangalore",
