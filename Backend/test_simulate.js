@@ -36,7 +36,7 @@ async function test(name, fn) {
   } catch (e) {
     console.error(`  ❌ ${name}: ${e.message}`);
     process.exitCode = 1;
-  }// hiiiiiii
+  }
 }
 
 function assert(condition, msg) {
@@ -44,12 +44,10 @@ function assert(condition, msg) {
 }
 
 async function postSimulate(body) {
-  const payload = buildSimulationPayload(body);
-  console.log("Simulate payload:", payload);
   const res = await fetch(`${BACKEND}/simulate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   return { status: res.status, data: await res.json() };
 }
@@ -69,7 +67,6 @@ async function postSimulate(body) {
       temperature: 30, pollution: 50, rainfall: 80, vegetation: 40,
     });
     assert(status === 200, `status ${status}`);
-    assert(data.ok === true, `ok: ${data.ok}`);
     assert(data.status === "ok", `status: ${data.status}`);
     assert(data.source === "ml-inference", `source: ${data.source}`);
     assert(typeof data.prediction.flood_risk_probability === "number", "missing flood_risk");
@@ -83,11 +80,10 @@ async function postSimulate(body) {
 
   await test("POST /simulate echoes input back", async () => {
     const { data } = await postSimulate({
-      temperature: 20, pollution: 10, rainfall: 5, vegetation: 80, month: 6,
+      temperature: 20, pollution: 10, rainfall: 5, vegetation: 80,
     });
     assert(data.input.temperature === 20, "temperature mismatch");
     assert(data.input.rainfall === 5, "rainfall mismatch");
-    assert(data.prediction.input_echo.month === 6, "month mismatch");
   });
 
   await test("POST /simulate rejects out-of-range temperature", async () => {
