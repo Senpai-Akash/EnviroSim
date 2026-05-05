@@ -24,7 +24,8 @@ EnviroSim/
 │   ├── Dataset/     # Raw datasets
 │   ├── cleaned-data/# Processed datasets
 │   ├── outputs/     # Generated outputs
-│   └── Models/      # Placeholder Python model files
+│   ├── Models/      # Placeholder Python model files
+|   └── InferenceService    #ML
 └── README.md
 ```
 
