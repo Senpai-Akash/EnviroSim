@@ -20,8 +20,6 @@
 - Redis
 - ML Models 
 
-
-
 ## Features:
 - Map view
 - Slider feature
@@ -29,8 +27,6 @@
 - Prediction Catalogs
 - Heat graph
 - General stats
-
-
 ## Resources: 
 
 - earthengine.google.com 
@@ -40,9 +36,6 @@
 - devicon.dev/                          Icons
 - https://weatherstack.com/?utm_source=Github&utm_medium=Referral&utm_campaign=Public-apis-repo-Best-sellers            Weather API
 - https://github.com/public-apis/public-apis?tab=readme-ov-file#weather     ALL WEATHER APIs
-
-
-
 
 
 
